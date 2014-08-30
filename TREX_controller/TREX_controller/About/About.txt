@@ -1,0 +1,16 @@
+ 	
+	embedXcode
+	embedXcode+
+	----------------------------------
+	Embedded Computing on Xcode
+	
+	
+	© Rei VILO, 2010-2014
+	All rights reserved	
+	http://embedXcode.weebly.com/
+	
+	
+embedXcode  • Aug xx, 2014 release 174 • Support for LaunchPad WiFi with CC3200
+embedXcode+ • Aug xx, 2014 release 174 • Support for LaunchPad WiFi with CC3200
+	
+	

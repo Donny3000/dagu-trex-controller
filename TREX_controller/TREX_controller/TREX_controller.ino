@@ -44,16 +44,36 @@
 #include "IOpins.h"
 #include "LocalLibrary.h"
 
-#include <ros.h>
-#include <std_msgs/String.h>
+// For serial communications each datapacket must start with this byte
+#define startbyte 0x0F
 
+#include <ros.h>
+#include <ros_dagu_trex_controller_msgs/status.h>
 
 // Define variables and constants
+//
+// Brief    ROS Node Handle for Publishers and Subscibers
+// Details  Node handle, which allows our program to create publishers and
+//          subscribers. The node handle also takes care of serial port
+//          communications.
+//
+ros::NodeHandle nh;
+
+// Brief    The T'REX ROS Status Message to send periodically
+// Details
+//
+ros_dagu_trex_controller_msgs::status status_msg;
+
+// Brief    The T'REX Controller Publisher
+// Details  The actual publisher for the statuses of the T'REX controller
+//
+ros::Publisher status_pub("t_rex/status", &status_msg);
+
 //
 // Breif    I2C slave address
 // Details  Set the I2C address of the controller
 //
-byte I2Caddress = 0x07;
+byte I2Caddress;
 
 // Brief    I2C clock frequency can be 100kHz(default) or 400kHz
 // Details
@@ -71,7 +91,15 @@ byte pwmfreq;          // value from 1-7
 // Details  mode=0: I2C / mode=1: Radio Control / mode=2: Bluetooth / mode=3: Shutdown
 //
 byte ControllerInterface::mode = 0;
+
+// Brief
+// Details
+//
 byte ControllerInterface::lmbrake = 0;
+
+// Brief
+// Details
+//
 byte ControllerInterface::rmbrake = 0;
 
 // Brief
@@ -84,39 +112,77 @@ byte ControllerInterface::devibrate = 50;
 //
 int ControllerInterface::sensitivity = 50;
 
-// left and right motor speeds -255 to +255
+// Brief    left motor speeds -255 to +255
+// Details
+//
 int ControllerInterface::lmspeed = 0;
+
+// Brief    right motor speeds -255 to +255
+// Details
+//
 int ControllerInterface::rmspeed = 0;
-int ControllerInterface::lmcur = 0;             // left right motor current
-int ControllerInterface::rmcur = 0;             // right motor current
-// left and right encoder values
+
+// Brief    left motor current
+// Details
+//
+int ControllerInterface::lmcur = 0;
+
+// Breif    right motor current
+// Details
+//
+int ControllerInterface::rmcur = 0;
+
+// Breif    left encoder values
+// Details
+//
 int ControllerInterface::lmenc = 0;
+
+// Breif    right encoder values
+// Details
+//
 int ControllerInterface::rmenc = 0;
-// X, Y, Z accelerometer readings
+
+// Brief X, Y, Z accelerometer readings
+// Details
+//
 int ControllerInterface::xaxis = 0;
 int ControllerInterface::yaxis = 0;
 int ControllerInterface::zaxis = 0;
-// X, Y, Z impact readings
+
+// Brief X, Y, Z impact readings
+// Details
+//
 int ControllerInterface::deltx = 0;
 int ControllerInterface::delty = 0;
 int ControllerInterface::deltz = 0;
     
-int ControllerInterface::servopos[6];       // array stores position data for up to 6 servos
+// Brief array stores position data for up to 6 servos
+// Details
+//
+int ControllerInterface::servopos[6];
 
 //
 // Brief	Interface to the T'REX Controller Hardware Components
 // Details	Interface to acces the various hardware components on the T'REX
 //          controller to set or get data.
 //
-ControllerInterface ctrlIf;
+ControllerInterface ctrlIf( &nh );
 
 // Brief    Timer used to monitor accelerometer and encoders
 // Details
 //
-unsigned long time;
+unsigned long time = 0;
 
-// For serial communications each datapacket must start with this byte
-#define startbyte 0x0F
+// Brief    Switch between accelerometer/power readings
+// Details  Variable used to alternate between reading accelerometer and power
+//          analog inputs
+//
+byte alternate;
+
+// Brief    Counter to blink the publish the status message
+// Details  Counter to publish status messages every 1 second
+//
+unsigned int publishCounter = 0;
 
 //------------------------------------------------------------------------------- Receive commands from I²C Master -----------------------------------------------
 void I2Ccommand(int recvflag)
@@ -240,66 +306,46 @@ void I2Ccommand(int recvflag)
     ctrlIf.Servos();                                                                    // update servo positions
 }
 
-//------------------------------------------------- Report control status to I²C Master --------------------------------------------------------
-void I2Cstatus()
+//----------------------- Report Status to ROS System -----------------------//
+void PublishStatusMessage()
 {
-    byte datapack[24];                             // array to store data packet in prior to transmission
-    datapack[0] = startbyte;                         // each packet starts with startbyte
-    datapack[1] = errorflag;                         // nonzero if bad data received - Master must wait until buffer has been flushed and send again
+    // Populate the status message
+    status_msg.seqId++;
+    status_msg.errorFlag = errorflag;
+    status_msg.batteryVoltage = volts;
+    status_msg.leftMotorCurrent = ControllerInterface::lmcur;
+    status_msg.leftMotorEncoder = ControllerInterface::lmenc;
+    status_msg.rightMotorCurrent = ControllerInterface::rmcur;
+    status_msg.rightMotorEncoder = ControllerInterface::rmenc;
+    status_msg.accel_x = ControllerInterface::xaxis;
+    status_msg.accel_y = ControllerInterface::yaxis;
+    status_msg.accel_z = ControllerInterface::zaxis;
+    status_msg.delta_x = ControllerInterface::deltx;
+    status_msg.delta_y = ControllerInterface::delty;
+    status_msg.delta_z = ControllerInterface::deltz;
     
-    datapack[2] = highByte(volts);                   // battery voltage      high byte
-    datapack[3] = lowByte(volts);                   // battery voltage      low  byte
+    // Publish the message
+    status_pub.publish( &status_msg );
+    nh.spinOnce();
     
-    datapack[4] = highByte(ControllerInterface::lmcur);                   // left  motor current  high byte
-    datapack[5] = lowByte(ControllerInterface::lmcur);                   // left  motor current  low  byte
-    
-    datapack[6] = highByte(ControllerInterface::lmenc);                   // left  motor encoder  high byte
-    datapack[7] = lowByte(ControllerInterface::lmenc);                   // left  motor encoder  low  byte
-    
-    datapack[8] = highByte(ControllerInterface::rmcur);                   // right motor current  high byte
-    datapack[9] = lowByte(ControllerInterface::rmcur);                   // right motor current  low  byte
-    
-    datapack[10] = highByte(ControllerInterface::rmenc);                  // right motor encoder  high byte
-    datapack[11] = lowByte(ControllerInterface::rmenc);                  // right motor encoder  low  byte
-    
-    datapack[12] = highByte(ControllerInterface::xaxis);                  // accelerometer X-axis high byte
-    datapack[13] = lowByte(ControllerInterface::xaxis);                  // accelerometer X-axis low  byte
-    
-    datapack[14] = highByte(ControllerInterface::yaxis);                  // accelerometer Y-axis high byte
-    datapack[15] = lowByte(ControllerInterface::yaxis);                  // accelerometer Y-axis low  byte
-    
-    datapack[16] = highByte(ControllerInterface::zaxis);                  // accelerometer Z-axis high byte
-    datapack[17] = lowByte(ControllerInterface::zaxis);                  // accelerometer Z-axis low  byte
-    
-    datapack[18] = highByte(ControllerInterface::deltx);                  // X-axis impact data   high byte
-    datapack[19] = lowByte(ControllerInterface::deltx);                  // X-axis impact data   low  byte
-    
-    datapack[20] = highByte(ControllerInterface::delty);                  // Y-axis impact data   high byte
-    datapack[21] = lowByte(ControllerInterface::delty);                  // Y-axis impact data   low  byte
-    
-    datapack[22] = highByte(ControllerInterface::deltz);                  // Z-axis impact data   high byte
-    datapack[23] = lowByte(ControllerInterface::deltz);                  // Z-axis impact data   low  byte
-    
-    Wire.write(datapack, 24);                       // transmit data packet of 24 bytes
-    errorflag = 0;                                   // reset erroflag once error has been reported to I²C Master
-    /*
-     Serial.println("Status data packet sent to Master:");
-     for(byte i = 0; i < 24; i++)
-     {
-        Serial.print(i, DEC);
-        Serial.print("\t");
-        Serial.println(datapack[i], DEC);
-     }
-     */
+    // Reset erroflag once error has been reported to I²C Master
+    errorflag = 0;
 }
-
 
 //
 // Brief	Setup
 // Details	Define the pin the LED is connected to
 //
 // Add setup code 
-void setup() {
+void setup()
+{
+    // Initialize the sequence id of the status message
+    status_msg.seqId = 0;
+    
+    // Initialize the ROS node handle for our publisher and subscriber
+    nh.initNode();
+    nh.advertise( status_pub );
+
     //========================================== Choose your desired motor PWM frequency ================================================//
     //                       Note that higher frequencies increase inductive reactance and reduce maximum torque                         //
     //                               Many smaller motors will not work efficiently at higher frequencies                                 //
@@ -318,7 +364,7 @@ void setup() {
     //TCCR2B = TCCR2B & B11111000 | B00000111; pwmfreq = 7;    // set timer 2 divisor to 1024 for PWM frequency of     30.517578125 Hz
 
 
-    //all IO pins are input by default on powerup --------- configure motor control pins for output -------- pwm autoconfigures -----------
+    // all IO pins are input by default on powerup --------- configure motor control pins for output -------- pwm autoconfigures -----------
 
     pinMode(lmpwmpin, OUTPUT);                            // configure left  motor PWM       pin for output
     pinMode(lmdirpin, OUTPUT);                            // configure left  motor direction pin for output
@@ -337,26 +383,18 @@ void setup() {
     int t2 = int( pulseIn(RCsteerpin, HIGH, 30000) );     // read steering/right stick
     if(t1 > 1000 && t1 < 2000 && t2 > 1000 && t2 < 2000)  // RC signals detected - go to RC mode
     {
-        ControllerInterface::mode = 1;                                         // set mode to RC
+        ControllerInterface::mode = 1;                    // set mode to RC
         ctrlIf.MotorBeep( 3 );                            // generate 3 beeps from the motors to indicate RC mode enabled
-    }
-  
-    //----------------------------------------------------- Test for Bluetooth module ------------------------------------------------------
-    if(ControllerInterface::mode == 0)                                         // no RC signals detected
-    {
-        ctrlIf.BluetoothConfig();                         // attempts to configure bluetooth module - changes to mode 2 if successful
-        if(ControllerInterface::mode == 2)
-            ctrlIf.MotorBeep(2);                          // generate 2 beeps from the motors to indicate bluetooth mode enabled
     }
   
     //----------------------------------------------------- Configure for I²C control ------------------------------------------------------
     if(ControllerInterface::mode == 0)                                         // no RC signal or bluetooth module detected
     {
         ctrlIf.MotorBeep( 1 );                            // generate 1 beep from the motors to indicate I²C mode enabled
-        byte i = EEPROM.read(0);                          // check EEPROM to see if I²C address has been previously stored
+        byte i = EEPROM.read( 0 );                        // check EEPROM to see if I²C address has been previously stored
         if(i == 0x55)                                     // B01010101 is written to the first byte of EEPROM memory to indicate that an I2C address has been previously stored
         {
-            I2Caddress = EEPROM.read( 1 ); // read I²C address from EEPROM
+            I2Caddress = EEPROM.read( 1 );                // read I²C address from EEPROM
         }
         else                                              // EEPROM has not previously been used by this program
         {
@@ -364,10 +402,6 @@ void setup() {
             EEPROM.write(1, 0x07);                        // store default I²C address
             I2Caddress = 0x07;                            // set I²C address to default
         }
-    
-        Wire.begin( I2Caddress );                           // join I²C bus as a slave at I2Caddress
-        Wire.onReceive( I2Ccommand );              // specify ISR for data received
-        Wire.onRequest( I2Cstatus );               // specify ISR for data to be sent
     }
 }
 
@@ -375,14 +409,15 @@ void setup() {
 // Brief	Loop
 // Details	Execute the motor controller
 //
-void loop() {
+void loop()
+{
     //----------------------------------------------------- Diagnostic mode --------------------------------------------------------------
     /*
     ctrlIf.DiagnosticMode();
     return;
     */
     //----------------------------------------------------- Shutdown mode ----------------------------------------------------------------
-    if(ControllerInterface::mode == 3)                                         // if battery voltage too low
+    if(ControllerInterface::mode == 3)                            // if battery voltage too low
     {
         ctrlIf.Shutdown();                                        // Shutdown motors and servos
         return;
@@ -394,16 +429,6 @@ void loop() {
         ctrlIf.RCmode();                                          // monitor signal from RC receiver and control motors
         return;                                            // I²C, Bluetooth and accelerometer are ignored
     }
-  
-    //----------------------------------------------------- Bluetooth mode ----------------------------------------------------------------
-    if(ControllerInterface::mode == 2)
-    {
-        ctrlIf.Bluetooth();                                       // control using Android phone and sample app
-        return;
-    }
-  
-    //----------------------------------------------------- I²C mode ----------------------------------------------------------------------
-  
 
     //===================================================== Programmer's Notes ============================================================
     //                                    Detecting impacts requires reasonably accurate timing.                                         //
@@ -413,31 +438,45 @@ void loop() {
     //                 This code alternates between reading accelerometer data and voltage / current readings every 1mS.                 //
     //                  If you edit this code then be aware that impact detection may be affected if care is not taken.                  //
     //=====================================================================================================================================
-
-
-    static byte alternate;                               // variable used to alternate between reading accelerometer and power analog inputs
-  
   
   
     //----------------------------------------------------- Perform these functions every 1mS ----------------------------------------------
     if(micros()-time > 999)
     {
-        time = micros();                                     // reset timer
-        alternate = alternate^1;                             // toggle alternate between 0 and 1
-        ctrlIf.Encoders();                                        // check encoder status every 1mS
+        // Reset timer
+        time = micros();
+        // Toggle alternate between 0 and 1
+        alternate = alternate^1;
+        // Check encoder status every 1mS
+        ctrlIf.Encoders();
 
         //--------------------------------------------------- These functions must alternate as they both take in excess of 780uS ------------
         if(alternate)
         {
-            ctrlIf.Accelerometer();                                 // monitor accelerometer every second millisecond
+            // Monitor accelerometer every second millisecond
+            ctrlIf.Accelerometer();
         }
         else
         {
-            ControllerInterface::lmcur = (analogRead(lmcurpin) - 511) * 48.83;          // read left motor current sensor and convert reading to mA
-            ControllerInterface::rmcur = (analogRead(rmcurpin) - 511) * 48.83;          // read right motor current sensor and convert reading to mA
-            volts = analogRead(voltspin) * 10 / 3.357;             // read battery level and convert to volts with 2 decimal places (eg. 1007 = 10.07 V)
+            // Read left motor current sensor and convert reading to mA
+            ControllerInterface::lmcur = (analogRead(lmcurpin) - 511) * 48.83;
+            // Read right motor current sensor and convert reading to mA
+            ControllerInterface::rmcur = (analogRead(rmcurpin) - 511) * 48.83;
+
+            // Read battery level and convert to volts with 2 decimal places
+            // (eg. 1007 = 10.07 V)
+            volts = analogRead( voltspin ) * 10 / 3.357;
             if(volts < lowbat)
-                ControllerInterface::mode = 3;                         // change to shutdown mode if battery voltage too low
+            {
+                // Change to shutdown mode if battery voltage too low
+//                ControllerInterface::mode = 3;
+            }
         }
+        
+        // Send a status message
+        if(publishCounter % 999 == 0)
+            PublishStatusMessage();
+
+        publishCounter++;
     }
 }

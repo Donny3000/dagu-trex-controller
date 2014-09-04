@@ -144,6 +144,10 @@ ifneq ($(USER_LIBS_LIST),0)
     USER_LIB_CPP_SRC = $(wildcard $(patsubst %,%/*.cpp,$(USER_LIBS))) # */
     USER_LIB_C_SRC   = $(wildcard $(patsubst %,%/*.c,$(USER_LIBS))) # */
 
+# TODO: This is a hack to only include the root folder of the user library,
+# rather than the folders 2-3 levels deep.  Need to find a better solution
+    USER_LIBS        = $(s3)
+
     USER_OBJS        = $(patsubst $(USER_LIB_PATH)/%.cpp,$(OBJDIR)/libs/%.o,$(USER_LIB_CPP_SRC))
     USER_OBJS       += $(patsubst $(USER_LIB_PATH)/%.c,$(OBJDIR)/libs/%.o,$(USER_LIB_C_SRC))
 endif

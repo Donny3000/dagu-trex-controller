@@ -26,36 +26,13 @@
 #include <Servo.h>
 #include <Wire.h>
 #include <EEPROM.h>
+#include <ros.h>
 #include "IOpins.h"
 
 // For serial communications each datapacket must start with this byte
 #define startbyte 0x0F
-
-//==== Bluetooth AT+ commands ====//
+ 
 /*
- --------- Test Communications --------
- Send: AT            Receive: OK
- 
- 
- ---------- Change Baud Rate ----------
- Send: AT+BAUD1      Receive: OK1200
- Send: AT+BAUD2      Receive: OK2400
- Send: AT+BAUD3      Receive: OK4800
- Send: AT+BAUD4      Receive: OK9600
- Send: AT+BAUD5      Receive: OK19200
- Send: AT+BAUD6      Receive: OK38400
- Send: AT+BAUD7      Receive: OK57600
- Send: AT+BAUD8      Receive: OK115200
- 
- 
- ------------ Change Name -------------
- Send: AT+NAMEname   Receive: OKsetname
- 
- 
- --------- Change Pairing Code --------
- Send: AT+PIN1234    Receive: OKsetpin
- 
- 
  The provided sample code requires external controllers to use the I²C data packet protocol listed below.
  Each data packet starts with a start byte (0x0F, decimal 15) as a simple means of error checking.
  
@@ -103,11 +80,9 @@
 class ControllerInterface
 {
 public:
-    ControllerInterface();
+    ControllerInterface(ros::NodeHandle *nodeHandle);
     
     void Accelerometer();
-    void Bluetooth();
-    void BluetoothConfig();
     void EmptyBuffer();
     void DiagnosticMode();
     void Encoders();
@@ -144,6 +119,7 @@ public:
 
     
 private:
+    ros::NodeHandle *mNodeHandle;
     int magnitude;         // impact magnitude
     byte RCdeadband;       // RCsignal can vary this much from 1500uS without controller responding
     byte servopin[6];      // array stores IO pin for each servo

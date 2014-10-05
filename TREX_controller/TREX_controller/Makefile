@@ -48,12 +48,13 @@ USER_LIBS_LIST = ros_lib
 # BOARD_TAG is required
 # If not defined, error BOARD_TAG not defined
 #
-#BOARD_TAG  = mega2560
+#BOARD_TAG  = atmega328
+BOARD_TAG = mega2560
 
 # BOARD_PORT is optional
 # If not defined, BOARD_PORT = /dev/tty.usb* (default)
 #
-#BOARD_PORT = /dev/tty.usbmodem*
+#BOARD_PORT = /dev/tty.SLAB_USBtoUART
 
 # Xcode takes SKETCHBOOK_DIR from preferences.txt
 # If not defined, each IDE has its own SKETCHBOOK_DIR (default)

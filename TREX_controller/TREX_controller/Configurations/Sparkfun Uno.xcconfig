@@ -18,10 +18,10 @@
 //
 BOARD_TAG  = pro5v328
 
-// For Arduino 1.5, if different from Arduino 1.0
+// For Arduino 1.5.x, if different from Arduino 1.0.x
 //
 BOARD_TAG1 = pro
-BOARD_TAG2 = menu.cpu.pro.16MHzatmega328
+BOARD_TAG2 = pro.menu.cpu.16MHzatmega328
 
 // Port (optionnal)
 // most common are /dev/tty.usbserial*, /dev/tty.usbmodem* or /dev/tty.uart*

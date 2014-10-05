@@ -10,7 +10,7 @@
 	http://embedXcode.weebly.com/
 	
 	
-embedXcode  • Aug xx, 2014 release 174 • Support for LaunchPad WiFi with CC3200
-embedXcode+ • Aug xx, 2014 release 174 • Support for LaunchPad WiFi with CC3200
+embedXcode  • Sep 20, 2014 release 201 • Support for Xcode 6.0.1 on Mac OS X 10.9.5
+embedXcode+ • Sep 20, 2014 release 201 • Support for Xcode 6.0.1 on Mac OS X 10.9.5
 	
 	

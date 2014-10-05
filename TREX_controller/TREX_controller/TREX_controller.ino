@@ -45,32 +45,19 @@
 #include "LocalLibrary.h"
 
 // For serial communications each datapacket must start with this byte
-#define startbyte 0x0F
+#define startbyte       0x0F
+#define MAX_MOTOR_SPEED 0xFF
+
+// Comment out to create release firmware
+#define DEBUG
 
 #include <ros.h>
-#include <ros_dagu_trex_controller_msgs/status.h>
+#include <ros_dagu_trex_controller/status.h>
+#include <geometry_msgs/Twist.h>
 
 // Define variables and constants
 //
-// Brief    ROS Node Handle for Publishers and Subscibers
-// Details  Node handle, which allows our program to create publishers and
-//          subscribers. The node handle also takes care of serial port
-//          communications.
-//
-ros::NodeHandle nh;
-
-// Brief    The T'REX ROS Status Message to send periodically
-// Details
-//
-ros_dagu_trex_controller_msgs::status status_msg;
-
-// Brief    The T'REX Controller Publisher
-// Details  The actual publisher for the statuses of the T'REX controller
-//
-ros::Publisher status_pub("t_rex/status", &status_msg);
-
-//
-// Breif    I2C slave address
+// Brief    I2C slave address
 // Details  Set the I2C address of the controller
 //
 byte I2Caddress;
@@ -86,6 +73,20 @@ int lowbat = 550;
 int volts;             // battery voltage*10 (accurate to 1 decimal place)
 byte errorflag;        // non zero if bad data packet received
 byte pwmfreq;          // value from 1-7
+
+// Brief    ROS Node Handle for Publishers and Subscibers
+// Details  Node handle, which allows our program to create publishers and
+//          subscribers. The node handle also takes care of serial port
+//          communications.
+//
+ros::NodeHandle nh;
+
+//
+// Brief	Interface to the T'REX Controller Hardware Components
+// Details	Interface to acces the various hardware components on the T'REX
+//          controller to set or get data.
+//
+ControllerInterface ctrlIf( &nh );
 
 // Brief    The Current operating mode of the controller
 // Details  mode=0: I2C / mode=1: Radio Control / mode=2: Bluetooth / mode=3: Shutdown
@@ -161,12 +162,79 @@ int ControllerInterface::deltz = 0;
 //
 int ControllerInterface::servopos[6];
 
+// Brief
+// Details
 //
-// Brief	Interface to the T'REX Controller Hardware Components
-// Details	Interface to acces the various hardware components on the T'REX
-//          controller to set or get data.
+char tempStr[54];
+void twistCb(const geometry_msgs::Twist& twist_msg)
+{
+    // Stop the vehicle when the stick is centered
+    if(twist_msg.linear.x == 0 && twist_msg.linear.y == 0)
+    {
+        ControllerInterface::lmspeed = ControllerInterface::rmspeed = 0;
+    }
+    // Directly forward // Directly backwards
+    else if((twist_msg.linear.y == 1.0 || twist_msg.linear.y == -1.0) &&
+            twist_msg.linear.x == 0.0)
+    {
+        ControllerInterface::lmspeed = ControllerInterface::rmspeed = round(MAX_MOTOR_SPEED * twist_msg.linear.y);
+#ifdef DEBUG
+        sprintf(tempStr, "L%i, R%i", ControllerInterface::lmspeed, ControllerInterface::rmspeed);
+        nh.loginfo( tempStr );
+#endif
+    }
+    // Turning to the left
+    else if(twist_msg.linear.x < 0)
+    {
+        ControllerInterface::lmspeed = round(MAX_MOTOR_SPEED * twist_msg.linear.y);
+        if(twist_msg.linear.y > 0)
+        {
+            ControllerInterface::rmspeed = -round(MAX_MOTOR_SPEED * twist_msg.linear.x);
+        }
+        else
+        {
+            ControllerInterface::rmspeed = round(MAX_MOTOR_SPEED * twist_msg.linear.x);
+        }
+#ifdef DEBUG
+        sprintf(tempStr, "L%i, R%i", ControllerInterface::lmspeed, ControllerInterface::rmspeed);
+        nh.loginfo( tempStr );
+#endif
+    }
+    // Turning to the right
+    else if(twist_msg.linear.x > 0)
+    {
+        ControllerInterface::rmspeed = round(MAX_MOTOR_SPEED * twist_msg.linear.y);
+        if(twist_msg.linear.y > 0)
+        {
+            ControllerInterface::lmspeed = round(MAX_MOTOR_SPEED * twist_msg.linear.x);
+        }
+        else
+        {
+            ControllerInterface::lmspeed = -round(MAX_MOTOR_SPEED * twist_msg.linear.x);
+        }
+#ifdef DEBUG
+        sprintf(tempStr, "L%i, R%i", ControllerInterface::lmspeed, ControllerInterface::rmspeed);
+        nh.loginfo( tempStr );
+#endif
+    }
+    
+    ctrlIf.Motors();
+}
+
+// Brief
+// Details
 //
-ControllerInterface ctrlIf( &nh );
+ros::Subscriber<geometry_msgs::Twist> sub("cmd_vel", &twistCb);
+
+// Brief    The T'REX ROS Status Message to send periodically
+// Details
+//
+ros_dagu_trex_controller::status status_msg;
+
+// Brief    The T'REX Controller Publisher
+// Details  The actual publisher for the statuses of the T'REX controller
+//
+ros::Publisher status_pub("t_rex/status", &status_msg);
 
 // Brief    Timer used to monitor accelerometer and encoders
 // Details
@@ -177,134 +245,12 @@ unsigned long time = 0;
 // Details  Variable used to alternate between reading accelerometer and power
 //          analog inputs
 //
-byte alternate;
+byte alternate = 1;
 
 // Brief    Counter to blink the publish the status message
 // Details  Counter to publish status messages every 1 second
 //
 unsigned int publishCounter = 0;
-
-//------------------------------------------------------------------------------- Receive commands from I²C Master -----------------------------------------------
-void I2Ccommand(int recvflag)
-{
-    byte b;                                                                      // byte from buffer
-    int i;                                                                       // integer from buffer
-    
-    do                                                                           // check for start byte
-    {
-        b = Wire.read();                                                             // read a byte from the buffer
-        if(b != startbyte || recvflag != 27)
-            errorflag = errorflag | 1;                 // if byte does not equal startbyte or Master request incorrect number of bytes then generate error
-    } while(errorflag > 0 && Wire.available() > 0);                                 // if errorflag>0 then empty buffer of corrupt data
-    
-    if(errorflag > 0)                                                              // corrupt data received
-    {
-        ctrlIf.Shutdown();                                                                // shut down motors and servos
-        return;                                                                    // wait for valid data packet
-    }
-    //----------------------------------------------------------------------------- valid data packet received ------------------------------
-
-    b = Wire.read();                                                               // read pwmfreq from the buffer
-    if(b > 0 && b < 8)                                                               // if value is valid (1-7)
-    {
-        pwmfreq = b;                                                                 // update pwmfreq
-        TCCR2B = TCCR2B & B11111000 | pwmfreq;                                     // change timer 2 clock pre-scaler
-    }
-    else
-    {
-        errorflag = errorflag | 2;                                                 // incorrect pwmfreq given
-    }
-    
-    i = Wire.read() * 256 + Wire.read();                                               // read integer from I²C buffer
-    if(i > -256 && i < 256)
-    {
-        ControllerInterface::lmspeed = i;                                                                 // read new speed for   left  motor
-    }
-    else
-    {
-        errorflag = errorflag | 4;                                                 // incorrect motor speed given
-    }
-    ControllerInterface::lmbrake = Wire.read();                                                         // read new left  motor brake status
-    
-    i = Wire.read() * 256 + Wire.read();                                               // read integer from I²C buffer
-    if(i > -256 && i < 256)
-    {
-        ControllerInterface::rmspeed = i;                                                                 // read new speed for   right motor
-    }
-    else
-    {
-        errorflag = errorflag | 4;                                                 // incorrect motor speed given
-    }
-    ControllerInterface::rmbrake = Wire.read();                                                         // read new right motor brake status
-    
-    if(errorflag & 4)                                                            // incorrect motor speed / shutdown motors
-    {
-        ControllerInterface::lmspeed = 0;                                                                 // set left  motor speed to 0
-        ControllerInterface::rmspeed = 0;                                                                 // set right motor speed to 0
-    }
-    
-    for(byte j = 0; j < 6; j++)                                                        // read position information for 6 servos
-    {
-        i = Wire.read() * 256 + Wire.read();                                             // read integer from I²C buffer
-        if(abs(i) > 2400)
-            errorflag = errorflag | 8;                                 // incorrect servo position given
-        ControllerInterface::servopos[j] = i;                                                             // read new servo position -- 0 = no servo present
-    }
-    
-    ControllerInterface::devibrate = Wire.read();                                                       // update devibrate setting - default=50 (100mS)
-    i = Wire.read() * 256 + Wire.read();
-    if(i > -1 && i < 1024)
-    {
-        ControllerInterface::sensitivity = i;                                                             // impact sensitivity from 0-1023 - default is 50
-    }
-    else
-    {
-        errorflag = errorflag | 16;                                                // incorrect sensitivity given
-    }
-    
-    i = Wire.read() * 256 + Wire.read();                                               // read integer from I²C buffer
-    if(i > 549 && i < 3001)
-    {
-        lowbat = i;                                                                  // set low battery value (values higher than battery voltage will force a shutdown)
-    }
-    else
-    {
-        errorflag = errorflag | 32;                                                // incorrect lowbat given
-    }
-    
-    b = Wire.read();                                                               // read byte from buffer
-    if(b < 128)
-    {
-        I2Caddress = b;                                                              // change I²C address
-        EEPROM.write(1, b);                                                         // update EEPROM with new I²C address
-    }
-    else
-    {
-        errorflag = errorflag | 64;                                                // incorrect I²C address given
-    }
-    
-    b = Wire.read();                                                               // read byte from buffer
-    if(b < 2)
-    {
-        i2cfreq = b;                                                                 // 0=I²C clock 100kHz  -  >0=I²C clock 400kHz
-        if(i2cfreq == 0)                                                             // thanks to Nick Gammon: http://gammon.com.au/i2c
-        {
-            TWBR = 72;                                                                 // default I²C clock is 100kHz
-        }
-        else
-        {
-            TWBR = 12;                                                                 // change the I²C clock to 400kHz
-        }
-    }
-    else
-    {
-        errorflag = errorflag | 128;                                               // incorrect i2cfreq given
-    }
-    
-    ControllerInterface::mode = 0;                                                                      // breaks out of Shutdown mode when I²C command is given
-    ctrlIf.Motors();                                                                    // update brake, speed and direction of motors
-    ctrlIf.Servos();                                                                    // update servo positions
-}
 
 //----------------------- Report Status to ROS System -----------------------//
 void PublishStatusMessage()
@@ -326,12 +272,12 @@ void PublishStatusMessage()
     
     // Publish the message
     status_pub.publish( &status_msg );
-    nh.spinOnce();
     
     // Reset erroflag once error has been reported to I²C Master
     errorflag = 0;
 }
 
+int led = 13;
 //
 // Brief	Setup
 // Details	Define the pin the LED is connected to
@@ -339,12 +285,16 @@ void PublishStatusMessage()
 // Add setup code 
 void setup()
 {
+    // initialize the digital pin as an output.
+    pinMode(led, OUTPUT);
+    
     // Initialize the sequence id of the status message
     status_msg.seqId = 0;
     
     // Initialize the ROS node handle for our publisher and subscriber
     nh.initNode();
     nh.advertise( status_pub );
+    nh.subscribe( sub );
 
     //========================================== Choose your desired motor PWM frequency ================================================//
     //                       Note that higher frequencies increase inductive reactance and reduce maximum torque                         //
@@ -383,26 +333,13 @@ void setup()
     int t2 = int( pulseIn(RCsteerpin, HIGH, 30000) );     // read steering/right stick
     if(t1 > 1000 && t1 < 2000 && t2 > 1000 && t2 < 2000)  // RC signals detected - go to RC mode
     {
+        nh.loginfo("(T'REX Controller) Entered RC Mode");
         ControllerInterface::mode = 1;                    // set mode to RC
         ctrlIf.MotorBeep( 3 );                            // generate 3 beeps from the motors to indicate RC mode enabled
     }
-  
-    //----------------------------------------------------- Configure for I²C control ------------------------------------------------------
-    if(ControllerInterface::mode == 0)                                         // no RC signal or bluetooth module detected
-    {
-        ctrlIf.MotorBeep( 1 );                            // generate 1 beep from the motors to indicate I²C mode enabled
-        byte i = EEPROM.read( 0 );                        // check EEPROM to see if I²C address has been previously stored
-        if(i == 0x55)                                     // B01010101 is written to the first byte of EEPROM memory to indicate that an I2C address has been previously stored
-        {
-            I2Caddress = EEPROM.read( 1 );                // read I²C address from EEPROM
-        }
-        else                                              // EEPROM has not previously been used by this program
-        {
-            EEPROM.write(0, 0x55);                        // set first byte to 0x55 to indicate EEPROM is now being used by this program
-            EEPROM.write(1, 0x07);                        // store default I²C address
-            I2Caddress = 0x07;                            // set I²C address to default
-        }
-    }
+    
+    ControllerInterface::mode = 2;
+    ctrlIf.MotorBeep( 2 ); // ROS Serial Mode
 }
 
 //
@@ -451,7 +388,7 @@ void loop()
         ctrlIf.Encoders();
 
         //--------------------------------------------------- These functions must alternate as they both take in excess of 780uS ------------
-        if(alternate)
+        if( alternate )
         {
             // Monitor accelerometer every second millisecond
             ctrlIf.Accelerometer();
@@ -466,17 +403,29 @@ void loop()
             // Read battery level and convert to volts with 2 decimal places
             // (eg. 1007 = 10.07 V)
             volts = analogRead( voltspin ) * 10 / 3.357;
+#ifndef DEBUG
             if(volts < lowbat)
             {
                 // Change to shutdown mode if battery voltage too low
-//                ControllerInterface::mode = 3;
+                ControllerInterface::mode = 3;
             }
+#endif
         }
         
         // Send a status message
         if(publishCounter % 999 == 0)
+        {
             PublishStatusMessage();
-
+#ifdef DEBUG
+            if( alternate )
+                digitalWrite(led, HIGH);   // turn the LED on (HIGH is the voltage level)
+            else
+                digitalWrite(led, LOW);   // turn the LED on (HIGH is the voltage level)
+#endif
+        }
         publishCounter++;
+        
+        // Read & Write
+        nh.spinOnce();
     }
 }

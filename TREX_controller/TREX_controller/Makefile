@@ -21,15 +21,10 @@
 # List application Arduino/chipKIT/Digispark/Energia/Maple/Microduino/Teensy/Wiring libraries here
 # default = 0 = none
 #
-# ARDUINO = EEPROM Esplora Ethernet Firmata GSM 
-#	LiquidCrystal Robot_Control Robot_Motor SD 
-#
 APP_LIBS_LIST = Servo Wire EEPROM
 
 # List user's libraries here 
 # default = 0 = none
-#
-
 #
 USER_LIBS_LIST = ros_lib
 
@@ -48,13 +43,12 @@ USER_LIBS_LIST = ros_lib
 # BOARD_TAG is required
 # If not defined, error BOARD_TAG not defined
 #
-#BOARD_TAG  = atmega328
 BOARD_TAG = mega2560
 
 # BOARD_PORT is optional
 # If not defined, BOARD_PORT = /dev/tty.usb* (default)
 #
-#BOARD_PORT = /dev/tty.SLAB_USBtoUART
+#BOARD_PORT = /dev/tty.usbmodem*
 
 # Xcode takes SKETCHBOOK_DIR from preferences.txt
 # If not defined, each IDE has its own SKETCHBOOK_DIR (default)
@@ -83,5 +77,4 @@ MAKEFILE_PATH  = $(CURRENT_DIR)/Makefiles
 UTILITIES_PATH = $(CURRENT_DIR)/Utilities
 
 include $(MAKEFILE_PATH)/Step1.mk
-
 

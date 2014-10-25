@@ -8,7 +8,7 @@
 # All rights reserved
 #
 #
-# Last update: Aug 08, 2014 release 173
+# Last update: Oct 25, 2014 release 220
 
 
 # Serial port check and selection
@@ -551,15 +551,20 @@ else ifeq ($(BUILD_CORE),x86)
 		$(CXX) $(LDFLAGS) -o $@ $(LOCAL_OBJS) $(TARGET_A) -L$(OBJDIR) -lm -lpthread
 		$(STRIP) $@
 
-else ifeq ($(VARIANT),stellarpad)
+else ifeq ($(BUILD_CORE),cc3200)
+		$(CXX) $(LDFLAGS) -o $@ $(SYSTEM_OBJS) $(LOCAL_OBJS) $(TARGET_A) -L$(OBJDIR) -lm -lc -lgcc
+
+else ifeq ($(BUILD_CORE),tm4c)
+  ifeq ($(VARIANT),stellarpad)
 # -lc -lm -lgcc need to be at the end of the sentence
 #		$(CXX) $(LDFLAGS) -o $@ $(SYSTEM_OBJS) $(LOCAL_OBJS) $(TARGET_A) -L$(OBJDIR) -lc -lm -lgcc
 # arm-none-eabi-ar doesn't seem to work with release 4.7.1
 #		$(CXX) $(LDFLAGS) -o $@ $(LOCAL_OBJS) $(REMOTE_OBJS) -L$(OBJDIR) -lm -lc -lgcc
 		$(CXX) $(LDFLAGS) -o $@ $(SYSTEM_OBJS) $(LOCAL_OBJS) $(TARGET_A) -L$(OBJDIR) -lm -lc -lgcc
 
-else ifeq ($(VARIANT),launchpad_129)
+  else ifeq ($(VARIANT),launchpad_129)
 		$(CXX) $(LDFLAGS) -o $@ $(SYSTEM_OBJS) $(LOCAL_OBJS) $(TARGET_A) -L$(OBJDIR) -lm -lc -lgcc
+  endif
 
 else ifeq ($(PLATFORM),MapleIDE)
 		$(CXX) $(LDFLAGS) -o $@ $(LOCAL_OBJS) $(TARGET_A) -L$(OBJDIR)
@@ -797,7 +802,7 @@ endif
 # Release management
 # ----------------------------------
 #
-RELEASE_NOW   := 173
+RELEASE_NOW   := 220
 
 
 # Rules
@@ -875,13 +880,13 @@ raw_upload:
 
 ifeq ($(UPLOADER),micronucleus)
 		osascript -e 'tell application "System Events" to display dialog "Click OK and plug the Digispark into the USB port." buttons {"OK"} with icon POSIX file ("$(UTILITIES_PATH)/TemplateIcon.icns") with title "embedXcode"'
-		$(call SHOW,"9.1-UPLOAD",$(UPLOADER))
-		$(call TRACE,"9-UPLOAD",$(UPLOADER))
+		$(call SHOW,"10.4-UPLOAD",$(UPLOADER))
+		$(call TRACE,"10-UPLOAD",$(UPLOADER))
 		$(AVRDUDE_EXEC) $(AVRDUDE_COM_OPTS) $(AVRDUDE_OPTS) -P$(USED_SERIAL_PORT) -Uflash:w:$(TARGET_HEX):i
 
 else ifeq ($(UPLOADER),avrdude)
-		$(call SHOW,"9.3-UPLOAD",$(UPLOADER))
-		$(call TRACE,"9-UPLOAD",$(UPLOADER))
+		$(call SHOW,"10.5-UPLOAD",$(UPLOADER))
+		$(call TRACE,"10-UPLOAD",$(UPLOADER))
 		$(AVRDUDE_EXEC) $(AVRDUDE_COM_OPTS) $(AVRDUDE_OPTS) -P$(USED_SERIAL_PORT) -Uflash:w:$(TARGET_HEX):i
 
     ifeq ($(AVRDUDE_PROGRAMMER),avr109)
@@ -889,64 +894,53 @@ else ifeq ($(UPLOADER),avrdude)
     endif
 
 else ifeq ($(UPLOADER),bossac)
-		$(call SHOW,"9.4-UPLOAD",$(UPLOADER))
-		$(call TRACE,"9-UPLOAD",$(UPLOADER))
+		$(call SHOW,"10.6-UPLOAD",$(UPLOADER))
+		$(call TRACE,"10-UPLOAD",$(UPLOADER))
 		$(BOSSAC) $(BOSSAC_OPTS) $(TARGET_BIN) -R
 
 else ifeq ($(UPLOADER),mspdebug)
-		$(call SHOW,"9.5-UPLOAD",$(UPLOADER))
-		$(call TRACE,"9-UPLOAD",$(UPLOADER))
+		$(call SHOW,"10.7-UPLOAD",$(UPLOADER))
+		$(call TRACE,"10-UPLOAD",$(UPLOADER))
         
 ifeq ($(MSPDEBUG_PROTOCOL),tilib)
-# libmsp430.so needs to be in the current directory
-# Solution 1: change directory doesn't work
-#		cd $(MSPDEBUG_PATH)
-#		$(MSPDEBUG) $(MSPDEBUG_OPTS) "$(MSPDEBUG_COMMAND) $(TARGET_HEX)"
-#		cd $(CURRENT_DIR)
+		cd $(MSPDEBUG_PATH); ./mspdebug $(MSPDEBUG_OPTS) "$(MSPDEBUG_COMMAND) $(CURRENT_DIR_SPACE)/$(TARGET_HEX)";
 
-# Solution 2: make a copy of libmsp430.so in the current directory
-		@cp $(MSPDEBUG_PATH)/libmsp430.so .
-		$(MSPDEBUG) $(MSPDEBUG_OPTS) "$(MSPDEBUG_COMMAND) $(TARGET_HEX)"
-		@if [ -f libmsp430.so ]; then rm libmsp430.so; fi
-		@if [ -f comm.log ]; then rm comm.log; fi
-
-else
+  else
 		$(MSPDEBUG) $(MSPDEBUG_OPTS) "$(MSPDEBUG_COMMAND) $(TARGET_HEX)"
 endif
         
 else ifeq ($(UPLOADER),lm4flash)
-		$(call SHOW,"9.6-UPLOAD",$(UPLOADER))
-		$(call TRACE,"9-UPLOAD",$(UPLOADER))
+		$(call SHOW,"10.8-UPLOAD",$(UPLOADER))
+		$(call TRACE,"10-UPLOAD",$(UPLOADER))
 		-killall openocd
 		$(LM4FLASH) $(LM4FLASH_OPTS) $(TARGET_BIN)
 
 
 else ifeq ($(UPLOADER),cc3200serial)
-		$(call SHOW,"9.7-UPLOAD",$(UPLOADER))
-		$(call TRACE,"9-UPLOAD",$(UPLOADER))
+		$(call SHOW,"10.9-UPLOAD",$(UPLOADER))
+		$(call TRACE,"10-UPLOAD",$(UPLOADER))
 		-killall openocd
 		@cp -r $(APP_TOOLS_PATH)/dll ./dll
 		$(CC3200SERIAL) $(USED_SERIAL_PORT) $(TARGET_BIN)
 		@if [ -d ./dll ]; then rm -R ./dll; fi
 
 else ifeq ($(UPLOADER),dfu-util)
-		$(call SHOW,"9.8-UPLOAD",$(UPLOADER))
-		$(call TRACE,"9-UPLOAD",$(UPLOADER))
+		$(call SHOW,"10.10-UPLOAD",$(UPLOADER))
+		$(call TRACE,"10-UPLOAD",$(UPLOADER))
 		$(DFU_UTIL) $(DFU_UTIL_OPTS) -D $(TARGET_BIN) -R
 		sleep 4
-		$(info .)
 
 else ifeq ($(UPLOADER),teensy_flash)
-		$(call SHOW,"9.9-UPLOAD",$(UPLOADER))
-		$(call TRACE,"9-UPLOAD",$(UPLOADER))
+		$(call SHOW,"10.11-UPLOAD",$(UPLOADER))
+		$(call TRACE,"10-UPLOAD",$(UPLOADER))
 		$(TEENSY_POST_COMPILE) -file=$(basename $(notdir $(TARGET_HEX))) -path=$(dir $(abspath $(TARGET_HEX))) -tools=$(abspath $(TEENSY_FLASH_PATH))
 		sleep 2
 		$(TEENSY_REBOOT)
 		sleep 2
 
 else ifeq ($(UPLOADER),izmirdl)
-		$(call SHOW,"9.a-UPLOAD",$(UPLOADER))
-		$(call TRACE,"9-UPLOAD",$(UPLOADER))
+		$(call SHOW,"10.13-UPLOAD",$(UPLOADER))
+		$(call TRACE,"10-UPLOAD",$(UPLOADER))
 		$(IZMIR) $(IZMIR_OPTS) $(TARGET_ELF) $(USED_SERIAL_PORT) 
 
 else
@@ -957,8 +951,8 @@ endif
 ispload:	$(TARGET_HEX)
 		@echo "---- ISP upload ---- "
 ifeq ($(UPLOADER),avrdude)
-		$(call SHOW,"9.c-UPLOAD",$(UPLOADER))
-		$(call TRACE,"9-UPLOAD",$(UPLOADER))
+		$(call SHOW,"10.14-UPLOAD",$(UPLOADER))
+		$(call TRACE,"10-UPLOAD",$(UPLOADER))
 		$(AVRDUDE_EXEC) $(AVRDUDE_COM_OPTS) $(AVRDUDE_ISP_OPTS) -e \
 			-U lock:w:$(ISP_LOCK_FUSE_PRE):m \
 			-U hfuse:w:$(ISP_HIGH_FUSE):m \
@@ -978,24 +972,11 @@ else
 		osascript -e 'tell application "Terminal" to do script "$(SERIAL_COMMAND) $(USED_SERIAL_PORT) $(SERIAL_BAUDRATE)"'
 endif
 
-#		echo "$@"
-#		echo "-- "
-#		export TERM="vt100"
-#		echo "#!/bin/sh" /tmp/arduino.command
-#		echo "$(SERIAL_COMMAND) $(SERIAL_PORT) $(SERIAL_BAUDRATE)" > /tmp/arduino.command
-#		chmod 0755 /tmp/arduino.command
-#		open /tmp/arduino.command
-
 size:
 		@echo "---- Size ----"
-#		echo 'PROGRAM_SIZE ' $(shell $(PROGRAM_SIZE))
-#		echo 'DATA_SIZE ' $(shell $(DATA_SIZE))
 		@if [ -f $(TARGET_HEX) ]; then echo 'Binary sketch size: ' $(shell $(HEXSIZE)) $(MAX_FLASH_BYTES); echo; fi
-#		@if [ -f $(TARGET_ELF) ]; then $(ELFSIZE); echo; fi
 		@if [ -f $(TARGET_BIN) ]; then echo 'Binary sketch size:' $(shell $(BINSIZE)) $(MAX_FLASH_BYTES); echo; fi
 		@if [ -f $(TARGET_ELF) ]; then echo 'Estimated SRAM used:' $(shell $(RAMSIZE)) $(MAX_RAM_BYTES); echo; fi
-#		@echo PROGRAM_SIZE $(PROGRAM_SIZE)
-#		@echo DATA_SIZE $(DATA_SIZE)
 		@echo 'Elapsed time:' $(STOPCHRONO)
 #		@if [ -n '$(MESSAGE_LINE)' ]; then echo 'Message: $(MESSAGE_LINE)'; fi;
 
@@ -1073,5 +1054,4 @@ end_all:
 end_build:
 		@echo "==== Build done ==== "
 
-                
 .PHONY:	all clean depends upload raw_upload reset serial show_boards headers size document

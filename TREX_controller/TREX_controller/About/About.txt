@@ -10,7 +10,7 @@
 	http://embedXcode.weebly.com/
 	
 	
-embedXcode  • Sep 20, 2014 release 201 • Support for Xcode 6.0.1 on Mac OS X 10.9.5
-embedXcode+ • Sep 20, 2014 release 201 • Support for Xcode 6.0.1 on Mac OS X 10.9.5
+embedXcode  • Oct 25, 2014 release 220 • Self-contained installation package
+embedXcode+ • Oct 25, 2014 release 221 • Self-contained installation package
 	
 	

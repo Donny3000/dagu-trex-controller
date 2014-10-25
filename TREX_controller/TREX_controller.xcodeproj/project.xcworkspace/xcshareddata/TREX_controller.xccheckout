@@ -14,7 +14,7 @@
 		<string>https://github.com/Donny3000/dagu-trex-controller.git</string>
 	</dict>
 	<key>IDESourceControlProjectPath</key>
-	<string>TREX_controller/TREX_controller.xcodeproj/project.xcworkspace</string>
+	<string>TREX_controller/TREX_controller.xcodeproj</string>
 	<key>IDESourceControlProjectRelativeInstallPathDictionary</key>
 	<dict>
 		<key>F10619684D6AE82E4A0FFB12437A735B5CB65FB1</key>

@@ -15,11 +15,17 @@
 # Energia LaunchPad Stellaris and Tiva C specifics
 # ----------------------------------
 #
+APPLICATION_PATH := $(ENERGIA_PATH)
+ENERGIA_RELEASE  := $(shell tail -c2 $(APPLICATION_PATH)/lib/version.txt)
+ARDUINO_RELEASE  := $(shell head -c4 $(APPLICATION_PATH)/lib/version.txt | tail -c3)
+
+ifeq ($(shell if [[ '$(ENERGIA_RELEASE)' -ge '13' ]] ; then echo 1 ; else echo 0 ; fi ),0)
+    $(error Energia release 13 required.)
+endif
+
 PLATFORM         := Energia
 BUILD_CORE       := tm4c
-PLATFORM_TAG      = ENERGIA=12 ARDUINO=101 EMBEDXCODE=$(RELEASE_NOW) $(filter __%__ ,$(GCC_PREPROCESSOR_DEFINITIONS))
-#PLATFORM_TAG      = ENERGIA=9 ARDUINO=101 EMBEDXCODE=$(RELEASE_NOW) $(filter-out ENERGIA,$(GCC_PREPROCESSOR_DEFINITIONS))
-APPLICATION_PATH := $(ENERGIA_PATH)
+PLATFORM_TAG      = ENERGIA=$(ENERGIA_RELEASE) ARDUINO=$(ARDUINO_RELEASE) EMBEDXCODE=$(RELEASE_NOW) $(filter __%__ ,$(GCC_PREPROCESSOR_DEFINITIONS))
 
 UPLOADER          = lm4flash
 LM4FLASH_PATH     = $(APPLICATION_PATH)/hardware/tools
